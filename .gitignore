@@ -1,0 +1,22 @@
+# Maven build output
+target/
+
+# Java class files
+*.class
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Office lock files
+~$*
+
+# Node tooling (ppt_build screenshots, not part of the app)
+node_modules/
+*.log
+.env
