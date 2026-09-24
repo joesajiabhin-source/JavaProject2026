@@ -1,6 +1,7 @@
 package com.library.service;
 
 import com.library.model.Book;
+import com.library.model.LoanRecord;
 import com.library.model.User;
 import com.library.utility.FineCalculator;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -14,10 +15,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Core library service — manages books and users backed by an embedded H2 SQL database.
+ * Core library service — manages books, users, and borrowing history
+ * backed by an embedded H2 SQL database.
  * Demonstrates:
  *  - Limited use of SQL (SELECT, INSERT, UPDATE, DELETE with JdbcTemplate)
- *  - Object-Oriented Programming (domain models Book, User, FineCalculator)
+ *  - Object-Oriented Programming (domain models Book, User, LoanRecord, FineCalculator)
  *  - Encapsulation & Abstraction (business rules hidden inside service and models)
  */
 @Service
@@ -38,6 +40,8 @@ public class Library {
         b.setGenre(rs.getString("genre"));
         b.setStatus(rs.getString("status"));
         b.setBorrowerId(rs.getInt("borrower_id"));
+        Date bd = rs.getDate("borrow_date");
+        b.setBorrowDate(bd != null ? bd.toLocalDate() : null);
         Date d = rs.getDate("due_date");
         b.setDueDate(d != null ? d.toLocalDate() : null);
         b.setRenewed(rs.getBoolean("renewed"));
@@ -54,6 +58,25 @@ public class Library {
         return u;
     };
 
+    // RowMapper to map SQL result set rows to OOP LoanRecord domain objects
+    private final RowMapper<LoanRecord> loanRecordRowMapper = (rs, rowNum) -> {
+        LoanRecord r = new LoanRecord();
+        r.setId(rs.getInt("id"));
+        r.setBookId(rs.getInt("book_id"));
+        r.setBookTitle(rs.getString("book_title"));
+        r.setUserId(rs.getInt("user_id"));
+        r.setUserName(rs.getString("user_name"));
+        Date bd = rs.getDate("borrow_date");
+        r.setBorrowDate(bd != null ? bd.toLocalDate() : null);
+        Date dd = rs.getDate("due_date");
+        r.setDueDate(dd != null ? dd.toLocalDate() : null);
+        Date rd = rs.getDate("return_date");
+        r.setReturnDate(rd != null ? rd.toLocalDate() : null);
+        r.setFineAmount(rs.getInt("fine_amount"));
+        r.setFinePaid(rs.getBoolean("fine_paid"));
+        return r;
+    };
+
     public Library(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
@@ -61,9 +84,13 @@ public class Library {
     // ─── Book Management (SQL INSERT, UPDATE, DELETE) ───
 
     public void addBook(String title, String author, String isbn, String genre) {
-        String sql = "INSERT INTO books (title, author, isbn, genre, status, borrower_id, due_date, renewed, on_hold) " +
-                     "VALUES (?, ?, ?, ?, 'available', NULL, NULL, false, false)";
-        jdbcTemplate.update(sql, title, author, isbn, genre);
+        if (title == null || title.isBlank() || author == null || author.isBlank() ||
+            isbn == null || isbn.isBlank() || genre == null || genre.isBlank()) {
+            throw new IllegalArgumentException("All book fields (title, author, ISBN, genre) are required");
+        }
+        String sql = "INSERT INTO books (title, author, isbn, genre, status, borrower_id, borrow_date, due_date, renewed, on_hold) " +
+                     "VALUES (?, ?, ?, ?, 'available', NULL, NULL, NULL, false, false)";
+        jdbcTemplate.update(sql, title.trim(), author.trim(), isbn.trim(), genre.trim());
     }
 
     public String removeBook(int id) {
@@ -75,18 +102,43 @@ public class Library {
     }
 
     public String updateBook(int id, String title, String author, String isbn, String genre) {
+        if (title == null || title.isBlank() || author == null || author.isBlank() ||
+            isbn == null || isbn.isBlank() || genre == null || genre.isBlank()) {
+            return "All book fields (title, author, ISBN, genre) are required";
+        }
         Book b = findBook(id);
         if (b == null) return "Book not found";
         String sql = "UPDATE books SET title = ?, author = ?, isbn = ?, genre = ? WHERE id = ?";
-        jdbcTemplate.update(sql, title, author, isbn, genre, id);
+        jdbcTemplate.update(sql, title.trim(), author.trim(), isbn.trim(), genre.trim(), id);
         return null;
     }
 
-    // ─── User Management (SQL INSERT) ───────────────────
+    // ─── User Management (SQL INSERT, UPDATE, DELETE) ───
 
     public void addUser(String name, String contact) {
+        if (name == null || name.isBlank() || contact == null || contact.isBlank()) {
+            throw new IllegalArgumentException("Reader name and contact are required");
+        }
         String sql = "INSERT INTO users (name, contact, role) VALUES (?, ?, 'READER')";
-        jdbcTemplate.update(sql, name, contact);
+        jdbcTemplate.update(sql, name.trim(), contact.trim());
+    }
+
+    public String updateUser(int id, String name, String contact) {
+        if (name == null || name.isBlank() || contact == null || contact.isBlank()) {
+            return "Reader name and contact are required";
+        }
+        User u = findUser(id);
+        if (u == null) return "User not found";
+        jdbcTemplate.update("UPDATE users SET name = ?, contact = ? WHERE id = ?", name.trim(), contact.trim(), id);
+        return null;
+    }
+
+    public String removeUser(int id) {
+        User u = findUser(id);
+        if (u == null) return "User not found";
+        if (loansForUser(id) > 0) return "Return all borrowed books first";
+        jdbcTemplate.update("DELETE FROM users WHERE id = ?", id);
+        return null;
     }
 
     // ─── Circulation (OOP Business Rules + SQL UPDATE) ──
@@ -101,24 +153,47 @@ public class Library {
         b.checkout(userId, LOAN_DAYS);
 
         // SQL persistence
-        String sql = "UPDATE books SET status = ?, borrower_id = ?, due_date = ?, renewed = ?, on_hold = ? WHERE id = ?";
-        jdbcTemplate.update(sql, b.getStatus(), b.getBorrowerId(), Date.valueOf(b.getDueDate()), b.isRenewed(), b.isOnHold(), b.getId());
+        String sql = "UPDATE books SET status = ?, borrower_id = ?, borrow_date = ?, due_date = ?, renewed = ?, on_hold = ? WHERE id = ?";
+        jdbcTemplate.update(sql, b.getStatus(), b.getBorrowerId(), Date.valueOf(b.getBorrowDate()), Date.valueOf(b.getDueDate()), b.isRenewed(), b.isOnHold(), b.getId());
         return null;
     }
 
-    /** Returns the fine amount, or -1 on error. */
+    /** Returns the fine amount, records loan history, or -1 on error. */
     public long returnBook(int bookId) {
         Book b = findBook(bookId);
         if (b == null || !b.isBorrowed()) return -1;
 
+        User u = findUser(b.getBorrowerId());
+
         // OOP utility: calculate fine based on domain object
         long fine = FineCalculator.calcFine(b);
 
-        // OOP model method
+        // Determine loan dates
+        LocalDate borrowDate = b.getBorrowDate() != null ? b.getBorrowDate() :
+                (b.getDueDate() != null ? b.getDueDate().minusDays(LOAN_DAYS) : LocalDate.now().minusDays(LOAN_DAYS));
+        LocalDate dueDate = b.getDueDate() != null ? b.getDueDate() : LocalDate.now();
+        LocalDate returnDate = LocalDate.now();
+
+        // Persistent loan history audit record
+        String historySql = "INSERT INTO loan_history (book_id, book_title, user_id, user_name, borrow_date, due_date, return_date, fine_amount, fine_paid) " +
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.update(historySql,
+                b.getId(),
+                b.getTitle(),
+                u != null ? u.getId() : b.getBorrowerId(),
+                u != null ? u.getName() : "Unknown Reader",
+                Date.valueOf(borrowDate),
+                Date.valueOf(dueDate),
+                Date.valueOf(returnDate),
+                fine,
+                fine == 0 // unpaid if fine > 0, paid/no-fine if 0
+        );
+
+        // OOP model method: reset book
         b.returnBook();
 
         // SQL persistence
-        String sql = "UPDATE books SET status = 'available', borrower_id = NULL, due_date = NULL, renewed = false, on_hold = false WHERE id = ?";
+        String sql = "UPDATE books SET status = 'available', borrower_id = NULL, borrow_date = NULL, due_date = NULL, renewed = false, on_hold = false WHERE id = ?";
         jdbcTemplate.update(sql, b.getId());
         return fine;
     }
@@ -151,6 +226,26 @@ public class Library {
         return null;
     }
 
+    // ─── Loan History & Fine Payment ─────────────────────
+
+    public List<LoanRecord> getAllLoanHistory() {
+        return jdbcTemplate.query("SELECT * FROM loan_history ORDER BY id DESC", loanRecordRowMapper);
+    }
+
+    public List<LoanRecord> getLoanHistoryForUser(int userId) {
+        return jdbcTemplate.query("SELECT * FROM loan_history WHERE user_id = ? ORDER BY id DESC", loanRecordRowMapper, userId);
+    }
+
+    public String payFine(int historyId) {
+        List<LoanRecord> list = jdbcTemplate.query("SELECT * FROM loan_history WHERE id = ?", loanRecordRowMapper, historyId);
+        if (list.isEmpty()) return "Loan record not found";
+        LoanRecord rec = list.get(0);
+        if (rec.getFineAmount() <= 0) return "No fine owed on this record";
+        if (rec.isFinePaid()) return "Fine is already marked as paid";
+        jdbcTemplate.update("UPDATE loan_history SET fine_paid = true WHERE id = ?", historyId);
+        return null;
+    }
+
     // ─── SQL Queries (SELECT) ───────────────────────────
 
     public Book findBook(int id) {
@@ -161,6 +256,10 @@ public class Library {
     public User findUser(int id) {
         List<User> list = jdbcTemplate.query("SELECT * FROM users WHERE id = ?", userRowMapper, id);
         return list.isEmpty() ? null : list.get(0);
+    }
+
+    public List<Book> getBooksBorrowedByUser(int userId) {
+        return jdbcTemplate.query("SELECT * FROM books WHERE borrower_id = ? AND status = 'borrowed' ORDER BY id", bookRowMapper, userId);
     }
 
     public List<Book> searchBooks(String query) {
