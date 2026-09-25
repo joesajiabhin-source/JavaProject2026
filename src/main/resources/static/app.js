@@ -7,9 +7,9 @@
    SECTION 2 — Helpers          : formatting, escaping, debounce
    SECTION 3 — UI Utilities     : toast, navigation, render dispatcher
    SECTION 4 — Templates       : shared row / card / badge HTML
-   SECTION 5 — Page Renderers   : Overview, Books, Readers, Loans
-   SECTION 6 — Modal           : popup forms
-   SECTION 7 — Form Handlers   : process submitted forms
+   SECTION 5 — Page Renderers   : Overview, Books, Readers, Loans (with History)
+   SECTION 6 — Modal           : popup forms & detail dialogs
+   SECTION 7 — Form Handlers   : process submitted forms & actions
    SECTION 8 — Initialization  : bind events, first render
    ============================================================ */
 
@@ -26,15 +26,20 @@ const api = {
   async getBook(id)      { const r = await fetch("/api/books/" + id); return r.ok ? r.json() : null; },
   async getLoans()       { return (await fetch("/api/loans")).json(); },
   async getUsers(q)      { return (await fetch("/api/users" + (q ? "?q=" + encodeURIComponent(q) : ""))).json(); },
+  async getUser(id)      { const r = await fetch("/api/users/" + id); return r.ok ? r.json() : null; },
+  async getHistory(uid)  { return (await fetch("/api/history" + (uid ? "?userId=" + uid : ""))).json(); },
 
   async addBook(data)    { return (await fetch("/api/books",   { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) })).json(); },
   async updateBook(id,d) { return (await fetch("/api/books/"+id, { method: "PUT",  headers: {"Content-Type":"application/json"}, body: JSON.stringify(d) })).json(); },
   async removeBook(id)   { return (await fetch("/api/books/"+id, { method: "DELETE" })).json(); },
   async addUser(data)    { return (await fetch("/api/users",   { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) })).json(); },
+  async updateUser(id,d) { return (await fetch("/api/users/"+id, { method: "PUT",  headers: {"Content-Type":"application/json"}, body: JSON.stringify(d) })).json(); },
+  async removeUser(id)   { return (await fetch("/api/users/"+id, { method: "DELETE" })).json(); },
   async borrow(data)     { return (await fetch("/api/borrow",  { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) })).json(); },
   async returnBook(id)   { return (await fetch("/api/return/"+id, { method: "POST" })).json(); },
   async renewBook(id)    { return (await fetch("/api/renew/"+id,  { method: "POST" })).json(); },
   async placeHold(id)    { return (await fetch("/api/hold/"+id,   { method: "POST" })).json(); },
+  async payFine(id)      { return (await fetch("/api/history/"+id+"/pay", { method: "POST" })).json(); },
 };
 
 
@@ -47,23 +52,38 @@ const $ = id => document.getElementById("id_" + id);
 const DAY       = 86400000;
 const MAX_LOANS = 3;
 
-const daysLeft = due => Math.ceil((new Date(due) - new Date()) / DAY);
+const daysLeft = due => {
+  if (!due) return 0;
+  const parts = String(due).split("-").map(Number);
+  const dueMidnight = new Date(parts[0], parts[1] - 1, parts[2]).getTime();
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return Math.round((dueMidnight - todayMidnight) / DAY);
+};
 
-const fmtDate = iso => new Date(iso).toLocaleDateString("en", {
-  day: "numeric", month: "short", year: "numeric"
-});
+const fmtDate = iso => {
+  if (!iso) return "—";
+  const parts = String(iso).split("-").map(Number);
+  if (parts.length === 3) {
+    return new Date(parts[0], parts[1] - 1, parts[2]).toLocaleDateString("en", {
+      day: "numeric", month: "short", year: "numeric"
+    });
+  }
+  return new Date(iso).toLocaleDateString("en", {
+    day: "numeric", month: "short", year: "numeric"
+  });
+};
 
 const fmtMoney = n => "₹" + n;
 
 const initials = name => name.split(" ").filter(Boolean)
   .map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
-/* Escape values before they land in HTML — keeps a title containing
-   quotes or < characters from breaking the markup (and blocks XSS). */
+/* Escape values before they land in HTML — keeps quotes or < from breaking markup */
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-/* Debounced search — one request after typing pauses, not one per keystroke. */
+/* Debounced search — one request after typing pauses */
 const debounce = (fn, ms = 250) => {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
@@ -71,7 +91,7 @@ const debounce = (fn, ms = 250) => {
 
 function spineColor(text) {
   const colors = ["#b94f3d", "#1f5d50", "#d69a35", "#54708f", "#7a556f", "#765c3c"];
-  const hash = [...text].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  const hash = [...(text || "")].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
   return colors[hash % colors.length];
 }
 
@@ -143,16 +163,25 @@ const loanRow = l => {
   </tr>`;
 };
 
-const readerCard = u => { const n = u.loans; return `<div class="card reader-card">
-  <div class="avatar">${esc(initials(u.name))}</div>
-  <div class="eyebrow">Reader ${String(u.id).padStart(2, "0")}</div>
-  <h3>${esc(u.name)}</h3>
-  <p>${esc(u.contact)}</p>
-  <div class="reader-meta">
-    <span><strong>${n}</strong> borrowed</span>
-    <span><strong>${MAX_LOANS - n}</strong> slots open</span>
-  </div>
-</div>`; };
+const readerCard = u => {
+  const n = u.loans;
+  return `<div class="card reader-card">
+    <div class="avatar">${esc(initials(u.name))}</div>
+    <div class="eyebrow">Reader ${String(u.id).padStart(2, "0")}</div>
+    <h3>${esc(u.name)}</h3>
+    <p>${esc(u.contact)}</p>
+    <div class="reader-meta">
+      <span><strong>${n}</strong> borrowed</span>
+      <span><strong>${MAX_LOANS - n}</strong> slots open</span>
+    </div>
+    <div class="quick-actions" style="margin-top: 14px;">
+      <button class="btn btn-secondary btn-sm" onclick="openModal('viewUser', ${u.id})">👁 Details</button>
+      <button class="btn btn-secondary btn-sm" onclick="openModal('updateUser', ${u.id})">✎ Edit</button>
+      <button class="btn btn-danger btn-sm" ${n > 0 ? "disabled title='Return all borrowed books first'" : ""}
+              onclick="doRemoveUser(${u.id})">✕</button>
+    </div>
+  </div>`;
+};
 
 const loanCard = l => {
   const b = l.book, d = daysLeft(b.dueDate);
@@ -179,6 +208,28 @@ const loanCard = l => {
   </div>`;
 };
 
+const historyRow = h => `<tr>
+  <td><strong>${esc(h.bookTitle)}</strong></td>
+  <td>${esc(h.userName)}</td>
+  <td>${fmtDate(h.borrowDate)}</td>
+  <td>${fmtDate(h.dueDate)}</td>
+  <td>${fmtDate(h.returnDate)}</td>
+  <td>${h.fineAmount > 0 ? fineTag(h.fineAmount) : "—"}</td>
+  <td>
+    ${h.fineAmount === 0
+      ? '<span class="pill available"><span class="pill-dot"></span>Settled</span>'
+      : (h.finePaid
+          ? '<span class="pill available"><span class="pill-dot"></span>Paid</span>'
+          : '<span class="pill borrowed"><span class="pill-dot"></span>Unpaid</span>')
+    }
+  </td>
+  <td>
+    ${h.fineAmount > 0 && !h.finePaid
+      ? `<button class="btn btn-primary btn-sm" onclick="doPayFine(${h.id})">Mark Paid</button>`
+      : "—"}
+  </td>
+</tr>`;
+
 const dueBadge = d => `<span class="due-badge ${d < 0 ? "overdue" : d <= 2 ? "soon" : "ok"}">
   ${d < 0 ? Math.abs(d) + "d overdue" : d === 0 ? "Due today" : d + "d left"}</span>`;
 
@@ -188,6 +239,7 @@ const EMPTY = {
   books:   '<div class="empty"><span>📖</span>No books found.</div>',
   readers: '<div class="empty"><span>👥</span>No readers found.</div>',
   loans:   '<div class="empty"><span>📚</span>No active loans — every book is home.</div>',
+  history: '<div class="empty"><span>📜</span>No borrowing history recorded yet.</div>',
 };
 
 
@@ -279,7 +331,7 @@ async function renderBooks() {
 const filterBooks = debounce(async q => {
   const seq = ++searchSeq;
   const list = await api.getBooks(q);
-  if (seq !== searchSeq) return;                 // a newer search already rendered
+  if (seq !== searchSeq) return;
 
   const tbody = document.querySelector(".table-wrap tbody");
   const wrap  = document.querySelector(".table-wrap");
@@ -330,15 +382,26 @@ const filterReaders = debounce(async q => {
 });
 
 async function renderLoans() {
-  const loans = await api.getLoans();
+  const [loans, history] = await Promise.all([api.getLoans(), api.getHistory()]);
 
   content().innerHTML = `
     ${pageHead("Circulation", `Loans & <em>returns.</em>`,
       "Track due dates, renew once, and return titles to the shelf.")}
 
-    <div class="loan-grid">
+    <div class="loan-grid mb">
       ${loans.map(loanCard).join("")}
       ${loans.length === 0 ? EMPTY.loans : ""}
+    </div>
+
+    <div class="card" style="margin-top: 32px;">
+      <div class="eyebrow">Audit & Archive</div>
+      <h2>📜 Borrowing History & Fines</h2>
+      ${history.length > 0 ? `
+        <div class="table-wrap"><table>
+          <thead><tr><th>Book</th><th>Reader</th><th>Borrowed</th><th>Due</th><th>Returned</th><th>Fine</th><th>Payment Status</th><th></th></tr></thead>
+          <tbody>${history.map(historyRow).join("")}</tbody>
+        </table></div>
+      ` : EMPTY.history}
     </div>`;
 }
 
@@ -347,7 +410,7 @@ async function renderLoans() {
    SECTION 6 — MODAL
    ============================================================ */
 
-async function openModal(type, bookId) {
+async function openModal(type, targetId) {
   let title, eyebrow, form;
 
   if (type === "book") {
@@ -387,7 +450,7 @@ async function openModal(type, bookId) {
     </form>`;
 
   } else if (type === "update") {
-    const b = await api.getBook(bookId);
+    const b = await api.getBook(targetId);
     if (!b) return toast("Book not found", true);
     title = "Update book details";
     eyebrow = "Edit catalogue entry";
@@ -398,6 +461,68 @@ async function openModal(type, bookId) {
       <div class="field"><label>Genre</label><input name="genre" value="${esc(b.genre)}" required></div>
       <button class="btn btn-primary">✓ Save changes</button>
     </form>`;
+
+  } else if (type === "updateUser") {
+    const u = await api.getUser(targetId);
+    if (!u) return toast("Reader not found", true);
+    title = "Update reader details";
+    eyebrow = `Reader ${String(u.id).padStart(2, "0")}`;
+    form = `<form class="form-grid" onsubmit="handleUpdateUser(event, ${u.id})">
+      <div class="field"><label>Full name</label><input name="name" value="${esc(u.name)}" required autofocus></div>
+      <div class="field"><label>Contact</label><input name="contact" value="${esc(u.contact)}" required></div>
+      <button class="btn btn-primary">✓ Save changes</button>
+    </form>`;
+
+  } else if (type === "viewUser") {
+    const [u, hist] = await Promise.all([api.getUser(targetId), api.getHistory(targetId)]);
+    if (!u) return toast("Reader not found", true);
+    title = esc(u.name);
+    eyebrow = `Reader ${String(u.id).padStart(2, "0")}`;
+
+    const booksHtml = u.borrowedBooks && u.borrowedBooks.length > 0 ? `
+      <div class="table-wrap mb"><table>
+        <thead><tr><th>Book</th><th>Due Date</th><th>Overdue Fine</th></tr></thead>
+        <tbody>${u.borrowedBooks.map(b => {
+          const d = daysLeft(b.dueDate);
+          return `<tr>
+            <td><strong>${esc(b.title)}</strong><br><span class="mono">${esc(b.author)}</span></td>
+            <td>${dueBadge(d)} <span class="mono">${fmtDate(b.dueDate)}</span></td>
+            <td>${fineTag(b.fine) || "—"}</td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table></div>
+    ` : '<p style="opacity: .7; margin-bottom: 16px;">No books currently borrowed.</p>';
+
+    const histHtml = hist && hist.length > 0 ? `
+      <div class="table-wrap mb"><table>
+        <thead><tr><th>Book</th><th>Returned</th><th>Fine</th><th>Status</th></tr></thead>
+        <tbody>${hist.map(h => `<tr>
+          <td><strong>${esc(h.bookTitle)}</strong></td>
+          <td>${fmtDate(h.returnDate)}</td>
+          <td>${h.fineAmount > 0 ? fineTag(h.fineAmount) : "₹0"}</td>
+          <td>${h.fineAmount === 0 ? "—" : (h.finePaid ? '<span class="pill available"><span class="pill-dot"></span>Paid</span>' : '<span class="pill borrowed"><span class="pill-dot"></span>Unpaid</span>')}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+    ` : '<p style="opacity: .7; margin-bottom: 16px;">No past borrowing history.</p>';
+
+    form = `
+      <div style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 14px;">
+          <div><span class="eyebrow">Contact</span><div><strong>${esc(u.contact)}</strong></div></div>
+          ${u.totalFines > 0 ? `<div><span class="eyebrow">Live Fines</span><div><strong style="color:var(--gold);">${fmtMoney(u.totalFines)}</strong></div></div>` : ""}
+        </div>
+
+        <div class="eyebrow">Currently Borrowed (${u.borrowedBooks ? u.borrowedBooks.length : 0})</div>
+        ${booksHtml}
+
+        <div class="eyebrow">Past Borrowing History (${hist ? hist.length : 0})</div>
+        ${histHtml}
+      </div>
+      <div class="quick-actions" style="margin-top: 14px;">
+        <button class="btn btn-secondary" onclick="closeModal(); openModal('updateUser', ${u.id})">✎ Edit Reader</button>
+        <button class="btn btn-danger" ${(u.borrowedBooks && u.borrowedBooks.length > 0) ? "disabled title='Return books first'" : ""}
+                onclick="closeModal(); doRemoveUser(${u.id})">✕ Delete Reader</button>
+      </div>`;
   }
 
   const ov = document.createElement("div");
@@ -428,8 +553,9 @@ const formValues = form => Object.fromEntries(new FormData(form).entries());
 async function handleAddBook(e) {
   e.preventDefault();
   const d = formValues(e.target);
-  await api.addBook({ title: d.title.trim(), author: d.author.trim(),
-                      isbn: d.isbn.trim(), genre: d.genre.trim() });
+  const res = await api.addBook({ title: d.title.trim(), author: d.author.trim(),
+                                  isbn: d.isbn.trim(), genre: d.genre.trim() });
+  if (res && res.error) return toast(res.error, true);
   closeModal(); toast("Book added to the collection"); render();
 }
 
@@ -438,48 +564,70 @@ async function handleUpdateBook(e, id) {
   const d = formValues(e.target);
   const res = await api.updateBook(id, { title: d.title.trim(), author: d.author.trim(),
                                           isbn: d.isbn.trim(), genre: d.genre.trim() });
-  if (res.error) return toast(res.error, true);
+  if (res && res.error) return toast(res.error, true);
   closeModal(); toast("Book updated successfully"); render();
 }
 
 async function handleAddUser(e) {
   e.preventDefault();
   const d = formValues(e.target);
-  await api.addUser({ name: d.name.trim(), contact: d.contact.trim() });
+  const res = await api.addUser({ name: d.name.trim(), contact: d.contact.trim() });
+  if (res && res.error) return toast(res.error, true);
   closeModal(); toast("New reader registered"); render();
+}
+
+async function handleUpdateUser(e, id) {
+  e.preventDefault();
+  const d = formValues(e.target);
+  const res = await api.updateUser(id, { name: d.name.trim(), contact: d.contact.trim() });
+  if (res && res.error) return toast(res.error, true);
+  closeModal(); toast("Reader updated successfully"); render();
+}
+
+async function doRemoveUser(id) {
+  const res = await api.removeUser(id);
+  if (res && res.error) return toast(res.error, true);
+  toast("Reader removed"); render();
 }
 
 async function handleBorrow(e) {
   e.preventDefault();
   const d = formValues(e.target);
   const res = await api.borrow({ bookId: +d.bookId, userId: +d.userId });
-  if (res.error) return toast(res.error, true);
+  if (res && res.error) return toast(res.error, true);
   closeModal(); toast("Book checked out for 14 days"); render();
 }
 
 async function doReturn(id) {
   const res = await api.returnBook(id);
-  if (res.error) return toast(res.error, true);
+  if (res && res.error) return toast(res.error, true);
   toast(res.fine > 0 ? "Book returned. Late fee: " + fmtMoney(res.fine) : "Book returned and ready to borrow");
   render();
 }
 
 async function doRenew(id) {
   const res = await api.renewBook(id);
-  if (res.error) return toast(res.error, true);
+  if (res && res.error) return toast(res.error, true);
   toast("Loan extended by 7 days"); render();
 }
 
 async function doPlaceHold(id) {
   const res = await api.placeHold(id);
-  if (res.error) return toast(res.error, true);
+  if (res && res.error) return toast(res.error, true);
   toast("Hold placed — renewal is now blocked"); render();
 }
 
 async function doRemoveBook(id) {
   const res = await api.removeBook(id);
-  if (res.error) return toast(res.error, true);
+  if (res && res.error) return toast(res.error, true);
   toast("Book removed"); render();
+}
+
+async function doPayFine(id) {
+  const res = await api.payFine(id);
+  if (res && res.error) return toast(res.error, true);
+  toast("Fine marked as paid");
+  render();
 }
 
 

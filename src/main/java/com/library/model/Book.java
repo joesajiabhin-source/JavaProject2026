@@ -14,6 +14,7 @@ public class Book {
     private String genre;
     private String status;      // "available" or "borrowed"
     private int borrowerId;     // 0 = none
+    private LocalDate borrowDate;
     private LocalDate dueDate;
     private boolean renewed;
     private boolean hold;
@@ -38,6 +39,7 @@ public class Book {
     public String getGenre()      { return genre; }
     public String getStatus()     { return status; }
     public int getBorrowerId()    { return borrowerId; }
+    public LocalDate getBorrowDate() { return borrowDate; }
     public LocalDate getDueDate() { return dueDate; }
     public boolean isRenewed()    { return renewed; }
     public boolean isOnHold()     { return hold; }
@@ -50,6 +52,7 @@ public class Book {
     public void setGenre(String genre)   { this.genre = genre; }
     public void setStatus(String status) { this.status = status; }
     public void setBorrowerId(int id)    { this.borrowerId = id; }
+    public void setBorrowDate(LocalDate d) { this.borrowDate = d; }
     public void setDueDate(LocalDate d)  { this.dueDate = d; }
     public void setRenewed(boolean r)    { this.renewed = r; }
     public void setHold(boolean h)       { this.hold = h; }
@@ -58,6 +61,7 @@ public class Book {
     public void checkout(int borrowerId, int loanDays) {
         this.status = "borrowed";
         this.borrowerId = borrowerId;
+        this.borrowDate = LocalDate.now();
         this.dueDate = LocalDate.now().plusDays(loanDays);
         this.renewed = false;
         this.hold = false;
@@ -67,6 +71,7 @@ public class Book {
     public void returnBook() {
         this.status = "available";
         this.borrowerId = 0;
+        this.borrowDate = null;
         this.dueDate = null;
         this.renewed = false;
         this.hold = false;
