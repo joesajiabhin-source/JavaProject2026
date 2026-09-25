@@ -1,0 +1,11 @@
+{
+  "buildCommand": null,
+  "outputDirectory": "src/main/resources/static",
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://folio-library-api.onrender.com/api/$1"
+    }
+  ]
+}
