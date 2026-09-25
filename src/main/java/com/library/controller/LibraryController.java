@@ -16,6 +16,7 @@ import java.util.Map;
  * REST controller — thin layer that delegates everything to Library service.
  * No business logic here.
  */
+@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api")
 public class LibraryController {
