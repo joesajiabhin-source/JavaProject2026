@@ -18,5 +18,6 @@ Thumbs.db
 
 # Node tooling (ppt_build screenshots, not part of the app)
 node_modules/
+dist/
 *.log
 .env
