@@ -1477,3 +1477,131 @@ main {
 @media (max-width: 720px) {
   .stat-object { width: 66px; height: 66px; right: 15px; top: 15px; }
 }
+
+/* ─── Hold Status Pill ─── */
+.pill.hold { color: #874b21; background: #fae8d8; }
+.pill.hold > span { background: #d97736; }
+
+/* ─── Desk Instruction & Guidance Area ─── */
+.instruction-panel {
+  background: #f0ebe0;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 22px 26px;
+  margin-bottom: 22px;
+  animation: rise .45s ease both;
+}
+.instruction-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+.instruction-head h2 {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 400;
+  margin: 4px 0 0;
+}
+.instruction-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.instruction-input-wrap svg {
+  position: absolute;
+  left: 14px;
+  color: #8a8477;
+  pointer-events: none;
+}
+.instruction-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fbf8f1;
+  border-radius: 7px;
+  padding: 12px 14px 12px 42px;
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+  transition: all .2s ease;
+}
+.instruction-input:focus {
+  border-color: var(--green);
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(31, 93, 80, 0.12);
+}
+.instruction-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+.instruction-pill {
+  border: 1px solid var(--line);
+  background: #e9e3d7;
+  color: #5c574c;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.instruction-pill:hover {
+  background: #ded6c7;
+  color: var(--ink);
+}
+.instruction-pill.active {
+  background: var(--green);
+  color: white;
+  border-color: var(--green);
+}
+.instruction-card {
+  background: #fbf8f1;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.instruction-card-text {
+  flex: 1;
+  min-width: 260px;
+}
+.instruction-card-text strong {
+  font-size: 13px;
+  display: block;
+  margin-bottom: 4px;
+}
+.instruction-steps {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: #635f55;
+  line-height: 1.6;
+}
+.instruction-rule {
+  font-size: 11px;
+  color: #79756b;
+  margin-top: 6px;
+}
+.reader-loan-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.reader-loan-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 12px;
+  background: #ede7db;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+
