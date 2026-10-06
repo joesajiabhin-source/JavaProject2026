@@ -136,7 +136,7 @@ td { border-top: 1px solid var(--line); padding: 14px 19px; font-size: 11px; }
 .large-spine span { writing-mode: vertical-rl; transform: rotate(180deg); text-transform: uppercase; font-size: 8px; letter-spacing: .25em; }
 .loan-card-body { padding: 25px; }
 .loan-card-body h2 { font-size: 27px; margin: 15px 0 3px; }.loan-card-body > p { color: #817c70; font-size: 10px; }
-dl { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 20px 0; padding: 11px 0; display: grid; grid-template-columns: 1fr 1fr; }
+dl { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 20px 0; padding: 11px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(85px, 1fr)); gap: 8px; }
 dt { color: #8e897e; font-size: 8px; text-transform: uppercase; letter-spacing: .1em; } dd { margin: 4px 0 0; font-size: 10px; font-weight: 600; }
 .card-actions { display: flex; gap: 8px; }.card-actions button { flex: 1; }
 .empty { min-height: 150px; grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 9px; color: #979185; font-size: 11px; }

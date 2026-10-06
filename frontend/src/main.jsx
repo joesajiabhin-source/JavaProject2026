@@ -45,6 +45,7 @@ const seedBooks = [
     genre: "Fiction",
     status: "available",
     borrowerId: null,
+    borrowDate: null,
     dueDate: null,
     renewed: false,
     holdUserId: null,
@@ -57,6 +58,7 @@ const seedBooks = [
     genre: "Self-growth",
     status: "borrowed",
     borrowerId: "u1",
+    borrowDate: dateFromNow(-10),
     dueDate: dateFromNow(4),
     renewed: false,
     holdUserId: null,
@@ -69,6 +71,7 @@ const seedBooks = [
     genre: "History",
     status: "borrowed",
     borrowerId: "u2",
+    borrowDate: dateFromNow(-17),
     dueDate: dateFromNow(-3),
     renewed: false,
     holdUserId: null,
@@ -81,6 +84,7 @@ const seedBooks = [
     genre: "Design",
     status: "available",
     borrowerId: null,
+    borrowDate: null,
     dueDate: null,
     renewed: false,
     holdUserId: null,
@@ -93,6 +97,7 @@ const seedBooks = [
     genre: "Science",
     status: "available",
     borrowerId: null,
+    borrowDate: null,
     dueDate: null,
     renewed: false,
     holdUserId: null,
@@ -105,6 +110,7 @@ const seedBooks = [
     genre: "Technology",
     status: "borrowed",
     borrowerId: "u3",
+    borrowDate: dateFromNow(-8),
     dueDate: dateFromNow(6),
     renewed: false,
     holdUserId: "u1", // Reserved for Maya Patel
@@ -479,6 +485,7 @@ function App() {
               ...b,
               status: "borrowed",
               borrowerId: userId,
+              borrowDate: new Date().toISOString().slice(0, 10),
               dueDate: dateFromNow(14),
               renewed: false,
               holdUserId: null,
@@ -508,6 +515,7 @@ function App() {
               ...item,
               status: "available",
               borrowerId: null,
+              borrowDate: null,
               dueDate: null,
               renewed: false,
             }
@@ -875,7 +883,7 @@ function App() {
                           <div>
                             <strong>{b.title}</strong>
                             <div style={{ fontSize: "10px", color: "#79756b" }}>
-                              Due: {formatDate(b.dueDate)}
+                              Borrowed: {formatDate(b.borrowDate || dateFromNow(-10))} • Due: {formatDate(b.dueDate)}
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
@@ -1292,6 +1300,10 @@ function Loans({ books, userById, initiateReturn, renewBook, onOpenHold, release
                   <div>
                     <dt>Reader</dt>
                     <dd>{userById[book.borrowerId]?.name}</dd>
+                  </div>
+                  <div>
+                    <dt>Borrowed</dt>
+                    <dd>{formatDate(book.borrowDate || dateFromNow(-10))}</dd>
                   </div>
                   <div>
                     <dt>Due date</dt>
