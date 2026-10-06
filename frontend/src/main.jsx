@@ -962,7 +962,7 @@ function Overview({
       label: "Overdue loans",
       value: overdue.length,
       note: fineTotal > 0 ? `Uncollected fines: ${money(fineTotal)}` : "All loans on schedule",
-      image: "/icons/clay-calendar.png",
+      image: "/icons/clay-overdue.png",
       urgent: overdue.length > 0,
     },
   ];
